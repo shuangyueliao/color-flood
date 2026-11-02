@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Color Flood — paint the whole board one color before your moves run out. Free single-file HTML5 flood-it puzzle game.">
+<meta name="theme-color" content="#0b0d18">
+<title>Color Flood · Flood-It Puzzle</title>
+<script>
+// 平台 SDK 按域名条件加载（独立运行时完全不加载，游戏行为不变）
+// 与 game/index.html 相同的域名守卫加载器（原样移植）
+(function () {
+  var host = location.hostname || "";
+  try {
+    if (host.indexOf("crazygames") !== -1) {
+      var s1 = document.createElement("script");
+      s1.src = "https://sdk.crazygames.com/crazygames-sdk-v3.js";
+      s1.onload = function () {
+        if (window.CrazyGames && window.CrazyGames.SDK) {
+          window.CrazyGames.SDK.init().then(function () {
+            try { window.CrazyGames.SDK.game.loadingStart(); } catch (e) {}
+            window.addEventListener("load", function () { try { window.CrazyGames.SDK.game.loadingStop(); } catch (e) {} });
+          }).catch(function () {});
+        }
+      };
+      document.head.appendChild(s1);
+      window.__portal = "crazygames";
+    } else if (host.indexOf("gamedistribution") !== -1 || host.indexOf("html5.gamedistribution.com") !== -1 || host.indexOf("gd.games") !== -1) {
+      var s2 = document.createElement("script");
+      s2.src = "https://sdk.gamedistribution.com/v2/main.min.js";
+      document.head.appendChild(s2);
+      window.__portal = "gamedistribution";
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#0b0d18; font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif; user-select:none; -webkit-user-select:none; }
+  #wrap { height:100%; max-width:560px; margin:0 auto; display:flex; flex-direction:column; padding:10px 12px calc(6px + env(safe-area-inset-bottom)); }
+  #top { display:flex; align-items:center; justify-content:space-between; padding:0 2px 6px; }
+  #title { font-size:16px; font-weight:900; letter-spacing:2px; background:linear-gradient(90deg,#5b8cff,#39d0d8,#ffd94a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #top .pills { display:flex; gap:6px; }
+  .pill { background:#151a2e; border:1px solid #272e4e; color:#9aa2cc; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:.5px; padding:5px 10px; cursor:pointer; touch-action:manipulation; }
+  .pill:active { transform:scale(.96); }
+  #stats { display:flex; gap:6px; }
+  .stat { flex:1; text-align:center; background:#11152a; border:1px solid #20264a; border-radius:10px; padding:5px 2px 6px; }
+  .stat .label { font-size:8.5px; color:#6a729c; letter-spacing:1px; font-weight:700; }
+  .stat .val { font-size:17px; font-weight:800; color:#e9ecff; margin-top:1px; }
+  #boardWrap { flex:1; position:relative; min-height:0; display:flex; align-items:center; justify-content:center; padding:8px 0; }
+  canvas { display:block; border-radius:14px; touch-action:none; background:#0e1120; box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  #overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(7,9,18,.76); backdrop-filter:blur(4px); z-index:5; }
+  #panel { background:#161b31; border:1px solid #2c3357; border-radius:18px; padding:24px 26px; text-align:center; color:#fff; width:min(88%,330px); box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  #panel h2 { font-size:22px; letter-spacing:1px; margin-bottom:8px; }
+  #panel p { color:#9aa2cc; font-size:12.5px; line-height:1.55; margin-bottom:12px; }
+  #panel .sub { font-size:11.5px; color:#767ea6; margin-bottom:14px; }
+  #panel .final { font-size:20px; font-weight:900; color:#ffd94a; margin-bottom:14px; letter-spacing:1px; }
+  #panel .stars { font-size:34px; letter-spacing:6px; margin-bottom:8px; }
+  #panel .stars .on { color:#ffd94a; }
+  #panel .stars .off { color:#333a5e; }
+  #mainBtn { background:linear-gradient(135deg,#3d6ff2,#38bfc9); color:#fff; border:none; border-radius:12px; padding:12px 34px; font-size:15px; font-weight:800; letter-spacing:1px; cursor:pointer; touch-action:manipulation; }
+  #mainBtn:active { transform:scale(.97); }
+  #palette { display:flex; justify-content:center; gap:9px; padding:2px 0 4px; opacity:.45; transition:opacity .25s; }
+  body.play #palette { opacity:1; }
+  .sw { position:relative; }
+  .dot { display:block; width:clamp(36px,11.5vw,46px); height:clamp(36px,11.5vw,46px); border-radius:50%; border:2px solid rgba(255,255,255,.22); cursor:pointer; touch-action:manipulation; box-shadow:0 3px 10px rgba(0,0,0,.35), inset 0 -4px 8px rgba(0,0,0,.22); }
+  .dot:active { transform:scale(.92); }
+  .dot.cur { opacity:.32; }
+  .badge { position:absolute; top:-7px; right:-7px; min-width:18px; height:18px; border-radius:9px; background:#0b0d18; border:1px solid #3a4270; color:#e9ecff; font-size:10px; font-weight:800; line-height:16px; text-align:center; padding:0 4px; z-index:2; }
+  #palette.nohint .badge { display:none; }
+  .keyhint { text-align:center; color:#565e88; font-size:9.5px; font-weight:700; margin-top:3px; }
+  #progress { height:6px; border-radius:3px; background:#161b31; border:1px solid #20264a; margin:2px 2px 4px; overflow:hidden; }
+  #progFill { height:100%; width:0%; border-radius:3px; background:linear-gradient(90deg,#2e9e52,#38bfc9); transition:width .3s ease; }
+  #footer { color:#4a5178; font-size:10px; text-align:center; padding:2px 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <div id="title">COLOR FLOOD</div>
+    <div class="pills">
+      <button type="button" id="hintBtn" class="pill">HINTS: ON</button>
+      <button type="button" id="muteBtn" class="pill">SOUND: ON</button>
+    </div>
+  </div>
+  <div id="stats">
+    <div class="stat"><div class="label">MOVES LEFT</div><div class="val" id="stSteps">25</div></div>
+    <div class="stat"><div class="label">GRID</div><div class="val" id="stGrid">14×14</div></div>
+    <div class="stat"><div class="label">STREAK</div><div class="val" id="stStreak">0</div></div>
+    <div class="stat"><div class="label">BEST SAVE</div><div class="val" id="stBest">0</div></div>
+  </div>
+  <div id="boardWrap">
+    <canvas id="game"></canvas>
+    <div id="overlay"><div id="panel"></div></div>
+  </div>
+  <div id="progress"><div id="progFill"></div></div>
+  <div id="palette"></div>
+  <div id="footer">Color Flood — a free puzzle game</div>
+</div>
+<script>
+"use strict";
+// ---------- 平台埋点（gameplayStart/gameplayStop，与 game/index.html 相同接法，域名守卫见页首 loader） ----------
+function cgStart() {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStart();
+    }
+  } catch (e) {}
+}
+function cgStop(win) {
+  try {
+    if (window.__portal === "crazygames" && window.CrazyGames && window.CrazyGames.SDK) {
+      window.CrazyGames.SDK.game.gameplayStop();
+      if (win) window.CrazyGames.SDK.game.happytime();
+    }
+  } catch (e) {}
+}
+
+// ---------- 常量：6 色无障碍色板（蓝橙绿粉青黄，明度刻意拉开） ----------
+var COLORS = [
+  { hex: "#3D6FF2", name: "Blue"   },  // 明度最低
+  { hex: "#F08A24", name: "Orange" },
+  { hex: "#2E9E52", name: "Green"  },  // 深绿，与青色拉开
+  { hex: "#E56BAD", name: "Pink"   },
+  { hex: "#38BFC9", name: "Cyan"   },
+  { hex: "#F2D24B", name: "Yellow" }   // 明度最高
+];
+var NCOLORS = COLORS.length;
+var BASE_N = 14, MAX_TIER = 2;
+var SIZES = [14, 16, 18];
+var FLASH_T = 0.28;
+
+// ===8<=== PURE-LOGIC-START ===8<=== （纯逻辑，单元测试切片，禁止引用 DOM）
+// 起点连通域：与 (0,0) 同色的所有格子（扁平下标标记）
+function computeComp(g, n) {
+  var mark = new Uint8Array(n * n);
+  var oldC = g[0][0];
+  var stack = [0];
+  mark[0] = 1;
+  var count = 0;
+  while (stack.length) {
+    var idx = stack.pop(); count++;
+    var r = (idx / n) | 0, c = idx - r * n, j;
+    if (r > 0)     { j = idx - n; if (!mark[j] && g[r - 1][c] === oldC) { mark[j] = 1; stack.push(j); } }
+    if (r < n - 1) { j = idx + n; if (!mark[j] && g[r + 1][c] === oldC) { mark[j] = 1; stack.push(j); } }
+    if (c > 0)     { j = idx - 1; if (!mark[j] && g[r][c - 1] === oldC) { mark[j] = 1; stack.push(j); } }
+    if (c < n - 1) { j = idx + 1; if (!mark[j] && g[r][c + 1] === oldC) { mark[j] = 1; stack.push(j); } }
+  }
+  return { mark: mark, count: count };
+}
+// 泛洪：选 color 后的最终区域 = 原连通域(重染色) + 相邻同色格合并
+// 允许经过：原连通域(base) 或 color 色格子，从 (0,0) 单次 BFS 即得
+function floodRegion(g, n, base, color) {
+  var mark = new Uint8Array(n * n);
+  var stack = [0];
+  mark[0] = 1;
+  var count = 0;
+  while (stack.length) {
+    var idx = stack.pop(); count++;
+    var r = (idx / n) | 0, c = idx - r * n, j;
+    if (r > 0)     { j = idx - n; if (!mark[j] && (base[j] || g[r - 1][c] === color)) { mark[j] = 1; stack.push(j); } }
+    if (r < n - 1) { j = idx + n; if (!mark[j] && (base[j] || g[r + 1][c] === color)) { mark[j] = 1; stack.push(j); } }
+    if (c > 0)     { j = idx - 1; if (!mark[j] && (base[j] || g[r][c - 1] === color)) { mark[j] = 1; stack.push(j); } }
+    if (c < n - 1) { j = idx + 1; if (!mark[j] && (base[j] || g[r][c + 1] === color)) { mark[j] = 1; stack.push(j); } }
+  }
+  return { mark: mark, count: count };
+}
+function isMono(g, n) {
+  var c0 = g[0][0];
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (g[r][c] !== c0) return false;
+  return true;
+}
+// 贪婪求解步数（每步选吞并格数最多的颜色；返回 -1 表示守卫期内未解出）
+function greedyMoves(g0, n, k) {
+  var g = [];
+  for (var r = 0; r < n; r++) g[r] = g0[r].slice();
+  var steps = 0, guard = n * n + 10;
+  while (!isMono(g, n) && guard-- > 0) {
+    var base = computeComp(g, n), bestC = -1, bestGain = -1;
+    for (var i = 0; i < k; i++) {
+      if (i === g[0][0]) continue;
+      var gain = floodRegion(g, n, base.mark, i).count - base.count;
+      if (gain > bestGain) { bestGain = gain; bestC = i; }
+    }
+    var res = floodRegion(g, n, base.mark, bestC);
+    for (var idx = 0; idx < n * n; idx++) if (res.mark[idx]) g[(idx / n) | 0][idx % n] = bestC;
+    steps++;
+  }
+  return isMono(g, n) ? steps : -1;
+}
+// ===8<=== PURE-LOGIC-END ===8<===
+
+function stepsFor(n) { return n === 14 ? 25 : n === 16 ? 29 : 33; }
+function tierOf(streak) { return Math.min(MAX_TIER, Math.floor(streak / 3)); }
+
+// ---------- 状态 ----------
+var N = BASE_N, STEPS = stepsFor(BASE_N);
+var grid = [];           // grid[r][c] = 0..5
+var comp = null;         // 起点连通域 {mark, count}
+var compCount = 0;
+var moves = 0;
+var state = "START";     // START | PLAY | END
+var streak = 0, bestStreak = 0, bestSave = 0;
+var muted = false, hints = true;
+var flashMap = {};       // 新吞并格子的闪光动画 idx -> t
+var floats = [];         // "+N" 飘字
+var spawnT = 0;          // 棋盘入场动画计时
+
+try {
+  streak = parseInt(localStorage.getItem("cf_streak") || "0", 10) || 0;
+  bestStreak = parseInt(localStorage.getItem("cf_beststreak") || "0", 10) || 0;
+  bestSave = parseInt(localStorage.getItem("cf_bestsave") || "0", 10) || 0;
+  muted = localStorage.getItem("cf_muted") === "1";
+  hints = localStorage.getItem("cf_hints") !== "0";
+} catch (e) {}
+
+// ---------- 音效（WebAudio 合成，无外部资源） ----------
+var actx = null;
+function ensureAudio() {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  } catch (e) {}
+}
+function beep(freq, dur, type, gainv) {
+  try {
+    if (muted) return;
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gainv || 0.1, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch (e) {}
+}
+function winTune() {
+  [523, 659, 784, 1047].forEach(function (f, i) {
+    setTimeout(function () { beep(f, 0.18, "triangle", 0.09); }, i * 110);
+  });
+}
+
+// ---------- 棋盘生成与操作 ----------
+function genBoard() {
+  var GREEDY_MAX = STEPS + 3; // 过滤贪婪步数过高的棋盘，保证可解性体验
+  for (var tries = 0; ; tries++) {
+    var g = [];
+    for (var r = 0; r < N; r++) {
+      g[r] = [];
+      for (var c = 0; c < N; c++) g[r][c] = (Math.random() * NCOLORS) | 0;
+    }
+    if (tries >= 40 || greedyMoves(g, N, NCOLORS) <= GREEDY_MAX) { grid = g; break; }
+  }
+  comp = computeComp(grid, N);
+  compCount = comp.count;
+}
+function captureCounts() {
+  var out = [];
+  for (var i = 0; i < NCOLORS; i++) {
+    if (i === grid[0][0]) { out.push(0); continue; }
+    out.push(floodRegion(grid, N, comp.mark, i).count - compCount);
+  }
+  return out;
+}
+function applyMove(ci) {
+  if (state !== "PLAY") return;
+  if (ci === grid[0][0]) { beep(140, 0.07, "square", 0.05); return; }
+  if (moves === 0) cgStart(); // 一局首次操作：通知平台进入玩法
+  var res = floodRegion(grid, N, comp.mark, ci);
+  var gained = res.count - compCount;
+  var idx;
+  for (idx = 0; idx < N * N; idx++) if (res.mark[idx] && !comp.mark[idx]) flashMap[idx] = 0.0001;
+  for (idx = 0; idx < N * N; idx++) if (res.mark[idx]) grid[(idx / N) | 0][idx % N] = ci;
+  comp = res; compCount = res.count;
+  moves++;
+  floats.push({ x: view.w / 2, y: view.h * 0.42, text: "+" + gained, life: 0.8, color: COLORS[ci].hex });
+  beep(240 + ci * 48, 0.07, "square", 0.05);
+  if (gained >= 6) beep(430 + Math.min(gained, 24) * 12, 0.12, "triangle", 0.07);
+  updateHUD(); refreshBadges();
+  if (compCount === N * N) endRound(true);
+  else if (moves >= STEPS) endRound(false);
+}
+function endRound(w) {
+  state = "END";
+  document.body.classList.remove("play");
+  var left = STEPS - moves;
+  var isNewBest = false;
+  if (w) {
+    streak++;
+    if (streak > bestStreak) { bestStreak = streak; try { localStorage.setItem("cf_beststreak", String(bestStreak)); } catch (e) {} }
+    try { localStorage.setItem("cf_streak", String(streak)); } catch (e) {}
+    if (left > bestSave) { bestSave = left; isNewBest = true; try { localStorage.setItem("cf_bestsave", String(bestSave)); } catch (e) {} }
+    winTune();
+  } else {
+    streak = 0;
+    try { localStorage.setItem("cf_streak", "0"); } catch (e) {}
+    beep(150, 0.5, "sawtooth", 0.07);
+  }
+  updateHUD();
+  cgStop(w);
+  if (w) showWin(left, isNewBest); else showLose();
+}
+
+// ---------- HUD / 徽标 ----------
+var stSteps = document.getElementById("stSteps");
+var stGrid = document.getElementById("stGrid");
+var stStreak = document.getElementById("stStreak");
+var stBest = document.getElementById("stBest");
+var paletteEl = document.getElementById("palette");
+var overlayEl = document.getElementById("overlay");
+var panelEl = document.getElementById("panel");
+var boardWrap = document.getElementById("boardWrap");
+
+function updateHUD() {
+  var left = Math.max(0, STEPS - moves);
+  stSteps.textContent = String(left);
+  stSteps.style.color = (state === "PLAY" && left <= 5) ? "#ff7d7d" : "";
+  stGrid.textContent = N + "×" + N;
+  stStreak.textContent = String(streak);
+  stBest.textContent = String(bestSave);
+  updateProgress();
+}
+var progFill = document.getElementById("progFill");
+function updateProgress() {
+  var pct = Math.round(compCount * 100 / (N * N));
+  progFill.style.width = pct + "%";
+}
+var dotBtns = [];
+COLORS.forEach(function (col, i) {
+  var wrap = document.createElement("div");
+  wrap.className = "sw";
+  var b = document.createElement("button");
+  b.type = "button";
+  b.className = "dot";
+  b.style.background = col.hex;
+  b.setAttribute("aria-label", "Paint " + col.name + " (key " + (i + 1) + ")");
+  var badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = "0";
+  b.appendChild(badge);
+  var key = document.createElement("div");
+  key.className = "keyhint";
+  key.textContent = String(i + 1);
+  wrap.appendChild(b); wrap.appendChild(key);
+  b.addEventListener("click", function () { ensureAudio(); applyMove(i); });
+  paletteEl.appendChild(wrap);
+  dotBtns.push({ btn: b, badge: badge });
+});
+function refreshBadges() {
+  var counts = (state === "PLAY") ? captureCounts() : [0, 0, 0, 0, 0, 0];
+  for (var i = 0; i < NCOLORS; i++) {
+    dotBtns[i].badge.textContent = String(counts[i]);
+    dotBtns[i].btn.classList.toggle("cur", state === "PLAY" && i === grid[0][0]);
+  }
+}
+function updateHintBtn() {
+  document.getElementById("hintBtn").textContent = "HINTS: " + (hints ? "ON" : "OFF");
+  paletteEl.classList.toggle("nohint", !hints);
+}
+function updateMuteBtn() {
+  document.getElementById("muteBtn").textContent = "SOUND: " + (muted ? "OFF" : "ON");
+}
+document.getElementById("hintBtn").addEventListener("click", function () {
+  hints = !hints;
+  try { localStorage.setItem("cf_hints", hints ? "1" : "0"); } catch (e) {}
+  updateHintBtn();
+  beep(600, 0.05, "sine", 0.05);
+});
+document.getElementById("muteBtn").addEventListener("click", function () {
+  muted = !muted;
+  try { localStorage.setItem("cf_muted", muted ? "1" : "0"); } catch (e) {}
+  updateMuteBtn();
+  if (!muted) { ensureAudio(); beep(600, 0.05, "sine", 0.05); }
+});
+
+// ---------- 结算面板 ----------
+var panelAction = null;
+function showPanel(html, action) {
+  panelEl.innerHTML = html;
+  overlayEl.style.display = "flex";
+  panelAction = action;
+  var mb = document.getElementById("mainBtn");
+  if (mb) mb.addEventListener("click", function (e) { e.stopPropagation(); ensureAudio(); action(); });
+}
+function hidePanel() { overlayEl.style.display = "none"; panelAction = null; }
+function showStart() {
+  state = "START";
+  updateHUD(); refreshBadges();
+  var records = bestStreak > 0
+    ? '<p class="sub">Best streak: ' + bestStreak + ' · Best save: ' + bestSave + '<br>Win 3 in a row and the board grows. Keys 1–6 pick a color.</p>'
+    : '<p class="sub">Win 3 in a row and the board grows. Keys 1–6 pick a color.</p>';
+  showPanel(
+    '<h2>COLOR FLOOD</h2>' +
+    '<p>Paint the region connected to the top-left tile.<br>Make the whole board one color before your moves run out.</p>' +
+    '<div class="final">' + BASE_N + '×' + BASE_N + ' · ' + stepsFor(BASE_N) + ' MOVES</div>' +
+    '<p class="sub">Badges on the color dots show how many tiles each pick would capture. Toggle with H.</p>' +
+    records +
+    '<button id="mainBtn">PLAY</button>',
+    beginPlay
+  );
+}
+function showWin(left, isNewBest) {
+  var earned = left >= Math.ceil(STEPS * 0.2) ? 3 : left >= Math.ceil(STEPS * 0.08) ? 2 : 1;
+  var stars = "";
+  for (var i = 0; i < 3; i++) stars += '<span class="' + (i < earned ? "on" : "off") + '">★</span>';
+  var nextN = SIZES[tierOf(streak)];
+  var up = nextN !== N;
+  showPanel(
+    '<h2>You Win!</h2>' +
+    '<p>Board flooded with ' + left + ' move' + (left === 1 ? '' : 's') + ' to spare.' + (isNewBest ? ' <b style="color:#ffd94a">New best save!</b>' : '') + '</p>' +
+    '<div class="stars">' + stars + '</div>' +
+    '<p class="sub">Win streak: ' + streak + (up ? ' — board grows to ' + nextN + '×' + nextN + '!' : '') + '</p>' +
+    '<button id="mainBtn">NEXT BOARD</button>',
+    nextRound
+  );
+}
+function showLose() {
+  var pct = Math.round(compCount * 100 / (N * N));
+  showPanel(
+    '<h2>Out of Moves</h2>' +
+    '<p>You flooded ' + pct + '% of the board — ' + (N * N - compCount) + ' tiles to go.</p>' +
+    '<button id="mainBtn">TRY AGAIN</button>',
+    nextRound
+  );
+}
+function beginPlay() {
+  state = "PLAY";
+  document.body.classList.add("play");
+  hidePanel();
+  refreshBadges();
+  beep(660, 0.07, "sine", 0.06);
+}
+function nextRound() {
+  N = SIZES[tierOf(streak)];
+  STEPS = stepsFor(N);
+  genBoard();
+  moves = 0;
+  flashMap = {}; floats = []; spawnT = 0;
+  resize();
+  beginPlay();
+  updateHUD();
+}
+function prepBoard() {
+  N = SIZES[tierOf(streak)];
+  STEPS = stepsFor(N);
+  genBoard();
+  moves = 0;
+  flashMap = {}; floats = []; spawnT = 0;
+  resize();
+  updateHUD(); refreshBadges();
+}
+
+// ---------- 画布自适应 ----------
+var canvas = document.getElementById("game");
+var ctx = canvas.getContext("2d");
+var dpr = Math.min(window.devicePixelRatio || 1, 2);
+var view = { w: 300, h: 300, cell: 20 };
+function resize() {
+  var bw = Math.max(160, boardWrap.clientWidth - 4);
+  var bh = Math.max(160, boardWrap.clientHeight - 4);
+  var size = Math.floor(Math.min(bw, bh));
+  canvas.width = Math.round(size * dpr);
+  canvas.height = Math.round(size * dpr);
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  view.w = size; view.h = size;
+  view.cell = size / N;
+}
+window.addEventListener("resize", resize);
+
+// ---------- 渲染 ----------
+function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+function easeOutBack(k) { var s = 1.7; k = k - 1; return 1 + (s + 1) * k * k * k + s * k * k; }
+function roundRect(c, x, y, w, h, rad) {
+  c.beginPath();
+  c.moveTo(x + rad, y);
+  c.arcTo(x + w, y, x + w, y + h, rad);
+  c.arcTo(x + w, y + h, x, y + h, rad);
+  c.arcTo(x, y + h, x, y, rad);
+  c.arcTo(x, y, x + w, y, rad);
+  c.closePath();
+}
+function render(t, dt) {
+  ctx.clearRect(0, 0, view.w, view.h);
+  ctx.fillStyle = "#0e1120";
+  ctx.fillRect(0, 0, view.w, view.h);
+  var cell = view.cell;
+  var pad = Math.max(1, cell * 0.045);
+  var inner = cell - pad * 2;
+  for (var r = 0; r < N; r++) {
+    for (var c = 0; c < N; c++) {
+      var k = clamp01((spawnT - (r + c) * 14) / 220);
+      if (k <= 0) continue;
+      var sc = 0.5 + 0.5 * easeOutBack(k);
+      var idx = r * N + c;
+      var fl = flashMap[idx];
+      var s = inner * sc * (fl !== undefined ? 1 + 0.1 * (1 - fl / FLASH_T) : 1);
+      var x = c * cell + pad + (inner - s) / 2;
+      var y = r * cell + pad + (inner - s) / 2;
+      ctx.globalAlpha = k;
+      ctx.fillStyle = COLORS[grid[r][c]].hex;
+      roundRect(ctx, x, y, s, s, Math.max(3, s * 0.22));
+      ctx.fill();
+      // 顶部高光，增加立体感
+      ctx.globalAlpha = k * 0.14;
+      ctx.fillStyle = "#ffffff";
+      roundRect(ctx, x + s * 0.12, y + s * 0.08, s * 0.76, s * 0.3, Math.max(2, s * 0.15));
+      ctx.fill();
+      if (fl !== undefined) {
+        ctx.globalAlpha = 0.45 * (1 - fl / FLASH_T);
+        ctx.fillStyle = "#ffffff";
+        roundRect(ctx, x, y, s, s, Math.max(3, s * 0.22));
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // 起点标记（呼吸圆环）
+  var pulse = 0.45 + 0.35 * Math.sin(t / 280);
+  ctx.strokeStyle = "rgba(255,255,255," + pulse.toFixed(3) + ")";
+  ctx.lineWidth = Math.max(1.5, cell * 0.05);
+  roundRect(ctx, pad + 1.5, pad + 1.5, inner - 3, inner - 3, Math.max(3, inner * 0.22));
+  ctx.stroke();
+  // 飘字
+  ctx.font = "800 22px -apple-system, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (var i = floats.length - 1; i >= 0; i--) {
+    var f = floats[i];
+    f.life -= dt; f.y -= 34 * dt;
+    if (f.life <= 0) { floats.splice(i, 1); continue; }
+    ctx.globalAlpha = Math.min(1, f.life / 0.4);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+    ctx.globalAlpha = 1;
+  }
+}
+var last = 0;
+function frame(t) {
+  var dt = Math.min((t - last) / 1000, 0.05);
+  last = t;
+  spawnT += dt * 1000;
+  for (var key in flashMap) {
+    flashMap[key] += dt;
+    if (flashMap[key] > FLASH_T) delete flashMap[key];
+  }
+  render(t, dt);
+  requestAnimationFrame(frame); // 动画帧循环无条件持续
+}
+requestAnimationFrame(frame);
+
+// ---------- 输入：触控 + 鼠标 + 键盘 ----------
+canvas.addEventListener("touchstart", function (e) { e.preventDefault(); ensureAudio(); }, { passive: false });
+canvas.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+canvas.addEventListener("mousedown", function () { ensureAudio(); });
+document.addEventListener("keydown", function (e) {
+  if (state !== "PLAY") {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (panelAction) { ensureAudio(); panelAction(); }
+    }
+    return;
+  }
+  if (e.key >= "1" && e.key <= "6") { ensureAudio(); applyMove(parseInt(e.key, 10) - 1); }
+  if (e.key === "h" || e.key === "H") { ensureAudio(); document.getElementById("hintBtn").click(); }
+});
+
+// ---------- 启动 ----------
+updateMuteBtn();
+updateHintBtn();
+prepBoard();
+showStart();
+
+// 调试/测试钩子（不影响游戏逻辑）
+window.__cf = {
+  get grid() { return grid; }, get N() { return N; }, get moves() { return moves; },
+  get STEPS() { return STEPS; }, get state() { return state; }, get compCount() { return compCount; },
+  computeComp: computeComp, floodRegion: floodRegion, greedyMoves: greedyMoves,
+  captureCounts: captureCounts, applyMove: applyMove
+};
+</script>
+</body>
+</html>
